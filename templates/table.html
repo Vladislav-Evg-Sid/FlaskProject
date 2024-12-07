@@ -1,0 +1,150 @@
+{% extends "menu.html" %}
+{% block content %}
+<h2 style="width: 100%; text-align: center;">Таблица данных {{ table_name }}</h2>
+
+<link rel="stylesheet" href="https://cdn.datatables.net/1.11.5/css/jquery.dataTables.min.css">
+<script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+<script src="https://cdn.datatables.net/1.11.5/js/jquery.dataTables.min.js"></script>
+
+<table id="titanicTable" class="display" style="width:100%">
+    <thead>
+        <tr>
+            {% for column in columns %}
+                <th>{{ column }}</th>
+            {% endfor %}
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in data %}
+        <tr>
+            {% for column in columns %}
+                <td data-id="{{ row['id'] }}" class="clickable-cell">{{ row[column] }}</td>
+            {% endfor %}
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<!-- Модальное окно -->
+<div class="modal fade" id="cellInfoModal" tabindex="-1" aria-labelledby="cellInfoModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="cellInfoModalLabel"></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="rowInfo"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+                <button type="button" class="btn btn-primary" id="saveChanges">Сохранить изменения</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<script>
+    $(document).ready(function() {
+        $('#titanicTable').DataTable({
+            "paging": true,            // Включаем пагинацию
+            "pageLength": 25,          // Количество записей на странице
+            "lengthChange": true,      // возможность менять количество записей на странице
+            "ordering": true,          // Включаем сортировку
+            "info": true,              // Отображаем количество записей
+            "autoWidth": true,         // автоматическую ширину
+            "language": {
+                "lengthMenu": "Показать _MENU_ записей на странице",
+                "zeroRecords": "Ничего не найдено",
+                "info": "Показано с _START_ по _END_ из _TOTAL_ записей",
+                "infoEmpty": "Нет доступных записей",
+                "infoFiltered": "(отфильтровано из _MAX_ записей)",
+                "search": "Поиск:",
+                "paginate": {
+                    "first": "Первая",
+                    "last": "Последняя",
+                    "next": "Следующая",
+                    "previous": "Предыдущая"
+                }
+            }
+        });
+    });
+
+    // Обработчик события click для ячеек таблицы
+    $('.clickable-cell').on('click', function() {
+        var tableName = "{{ table_name }}";
+        var row = $(this).closest('tr'); // Получаем строку
+        var rowData = [];
+        var columnNames = [];
+        var typeCol = [];
+
+        // Получаем все значения строки и названия столбцов
+        row.find('td').each(function(index) {
+            rowData.push($(this).text());
+            columnNames.push($('#titanicTable thead th').eq(index).text());
+        });
+
+        // Отправка AJAX-запроса на сервер
+        $.ajax({
+            url: '/handle_cell_click',
+            type: 'POST',
+            data: JSON.stringify({ row_data: rowData, column_names: columnNames, table_name: tableName, type_col: typeCol }),
+            contentType: 'application/json',
+            success: function(response) {
+                // Обновляем содержимое модального окна
+                var rowInfoHtml = '<ul>';
+                response.row_data.forEach(function(item, index) {
+                    if (response.type_col[index] == 1) {  // Строка
+                        rowInfoHtml += '<li><label>' + response.column_names[index] + ': </label><input type="text" class="form-control" value="' + item + '" data-index="' + index + '"></li>';
+                    }else if (response.type_col[index] == 2) { // Комбобокс
+                        rowInfoHtml += '<li><label>' + response.column_names[index] + ': </label><select class="form-control">';
+                        item.forEach(function(selItem, selIndex) {
+                            rowInfoHtml += '<option value="' + selItem[0] + '"' + selItem[2] + '>' + selItem[1] + '</option>';
+                        });
+                        rowInfoHtml += '</select></li>'
+                    }
+                });
+                rowInfoHtml += '</ul>';
+
+                // Обновляем заголовок модального окна
+                var modalTitle = `${tableName}. ${response.column_names[0]}: ${response.row_data[0]}`;
+                $('#cellInfoModalLabel').text(modalTitle);
+
+                $('#rowInfo').html(rowInfoHtml);
+
+                // Открываем модальное окно
+                var modal = new bootstrap.Modal(document.getElementById('cellInfoModal'));
+                modal.show();
+
+                // Обработчик сохранения изменений
+                $('#saveChanges').on('click', function() {
+                    var updatedRowData = response.row_data.slice(); // Создаем копию оригинальных данных
+                    $('#rowInfo input').each(function() {
+                        var index = $(this).data('index');
+                        updatedRowData[index] = $(this).val();
+                    });
+
+                    // Отправка AJAX-запроса на сервер для сохранения изменений
+                    $.ajax({
+                        url: '/save_changes',
+                        type: 'POST',
+                        data: JSON.stringify({ row_data: updatedRowData, column_names: response.column_names }),
+                        contentType: 'application/json',
+                        success: function(response) {
+                            alert('Изменения сохранены!');
+                            modal.hide();
+                        },
+                        error: function(error) {
+                            alert('Ошибка: ' + error.responseText);
+                        }
+                    });
+                });
+            },
+            error: function(error) {
+                alert('Ошибка: ' + error.responseText);
+            }
+        });
+    });
+</script>
+{% endblock %}

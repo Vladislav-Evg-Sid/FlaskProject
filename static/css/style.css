@@ -1,0 +1,13 @@
+
+.footer_div {
+    background-color: #f8f9fa; /* Цвет фона футера */
+}
+.logo {
+    width: 32px; /* Установите нужный размер */
+    height: 32px; /* Установите нужный размер */
+    background-color: #f8f9fa; /* Цвет фона логотипов */
+    border-radius: 50%; /* Округлые углы логотипов */
+}
+.author-name {
+    text-align: left; /* Прижимаем текст к левому краю */
+}
