@@ -21,7 +21,7 @@ class City(db.Model):
     __tablename__ = 'City'
     __table_args__ = {'schema': 'public'}
 
-    ID_City = Column(Integer, primary_key=True, default=1)
+    ID_City = Column(Integer, primary_key=True, autoincrement=True)
     City = Column(Text, nullable=False)
 
 
@@ -29,7 +29,7 @@ class Park(db.Model):
     __tablename__ = 'Park'
     __table_args__ = {'schema': 'public'}
 
-    ID_Park = Column(Integer, primary_key=True)
+    ID_Park = Column(Integer, primary_key=True, autoincrement=True)
     ID_City = Column(Integer, ForeignKey('public.City.ID_City'))
     Street = Column(Text, nullable=False)
     House_Number = Column(Integer, nullable=False)
@@ -42,7 +42,7 @@ class Employee(db.Model):
     __tablename__ = 'Employee'
     __table_args__ = {'schema': 'public'}
 
-    ID_Employee = Column(Integer, primary_key=True)
+    ID_Employee = Column(Integer, primary_key=True, autoincrement=True)
     ID_Park = Column(Integer, ForeignKey('public.Park.ID_Park'))
     Emp_Surname = Column(Text, nullable=False)
     Emp_Name = Column(Text, nullable=False)
@@ -56,7 +56,7 @@ class Fuel_Type(db.Model):
     __tablename__ = 'Fuel_Type'
     __table_args__ = {'schema': 'public'}
 
-    ID_Fuel = Column(Integer, primary_key=True)
+    ID_Fuel = Column(Integer, primary_key=True, autoincrement=True)
     Fuel = Column(Text, nullable=False)
 
 
@@ -64,7 +64,7 @@ class Transmission(db.Model):
     __tablename__ = 'Transmission'
     __table_args__ = {'schema': 'public'}
 
-    ID_Transm = Column(Integer, primary_key=True)
+    ID_Transm = Column(Integer, primary_key=True, autoincrement=True)
     Transm = Column(Text, nullable=False)
 
 
@@ -72,7 +72,7 @@ class Brand(db.Model):
     __tablename__ = 'Brand'
     __table_args__ = {'schema': 'public'}
 
-    ID_Brand = Column(db.Integer, primary_key=True)
+    ID_Brand = Column(Integer, primary_key=True, autoincrement=True)
     Brand = Column(db.String(100), nullable=False)
 
 
@@ -80,7 +80,7 @@ class Model(db.Model):
     __tablename__ = 'Model'
     __table_args__ = {'schema': 'public'}
 
-    ID_Model = Column(Integer, primary_key=True)
+    ID_Model = Column(Integer, primary_key=True, autoincrement=True)
     Model = Column(Text, nullable=False)
     ID_Brand = Column(Integer, ForeignKey('public.Brand.ID_Brand'))
     brand = relationship('Brand', backref='models')
@@ -90,7 +90,7 @@ class Auto(db.Model):
     __tablename__ = 'Auto'
     __table_args__ = {'schema': 'public'}
 
-    ID_Auto = Column(Integer, primary_key=True)
+    ID_Auto = Column(Integer, primary_key=True, autoincrement=True)
     ID_Brand = Column(Integer, ForeignKey('public.Brand.ID_Brand'))
     ID_Model = Column(Integer, ForeignKey('public.Model.ID_Model'))
     ID_Fuel = Column(Integer, ForeignKey('public.Fuel_Type.ID_Fuel'))
@@ -110,7 +110,7 @@ class Client(db.Model):
     __tablename__ = 'Client'
     __table_args__ = {'schema': 'public'}
 
-    ID_Client = Column(Integer, primary_key=True)
+    ID_Client = Column(Integer, primary_key=True, autoincrement=True)
     Cli_Surn = Column(Text, nullable=False)
     Cli_Name = Column(Text, nullable=False)
     Cli_Patr = Column(Text, nullable=False)
@@ -124,7 +124,7 @@ class Rent_Status(db.Model):
     __tablename__ = 'Rent_Status'
     __table_args__ = {'schema': 'public'}
 
-    ID_Status = Column(Integer, primary_key=True)
+    ID_Status = Column(Integer, primary_key=True, autoincrement=True)
     Status = Column(Text, nullable=False)
 
 
@@ -132,7 +132,7 @@ class Rent(db.Model):
     __tablename__ = 'Rent'
     __table_args__ = {'schema': 'public'}
 
-    ID_Rent = Column(Integer, primary_key=True)
+    ID_Rent = Column(Integer, primary_key=True, autoincrement=True)
     ID_Client = Column(Integer, ForeignKey('public.Client.ID_Client'))
     ID_Employee = Column(Integer, ForeignKey('public.Employee.ID_Employee'))
     ID_Auto = Column(Integer, ForeignKey('public.Auto.ID_Auto'))
@@ -147,111 +147,124 @@ class Rent(db.Model):
     status = relationship('Rent_Status', backref='rents')
 
 def get_brands() -> list[dict[str, int|str]]:
+    columns = ['№', 'Марка']
     with Session(db.engine) as session:
         data = session.query(
-            Brand.ID_Brand.label('№'),
-            Brand.Brand.label('Марка')
+            Brand.ID_Brand.label(columns[0]),
+            Brand.Brand.label(columns[1])
         ).all()
     data_dicts = [row._asdict() for row in data]
-    return data_dicts
+    return data_dicts, columns
 
 def get_models() -> list[dict[str, int|str]]:
+    columns = ['№', 'Марка', 'Модель']
     with Session(db.engine) as session:
         data = session.query(
-            Model.ID_Model.label('№'),
-            Brand.Brand.label('Марка'),
-            Model.Model.label('Модель')
+            Model.ID_Model.label(columns[0]),
+            Brand.Brand.label(columns[1]),
+            Model.Model.label(columns[2])
         ).join(Brand, Brand.ID_Brand == Model.ID_Brand)
     data_dicts = [row._asdict() for row in data]
-    
-    return data_dicts
+    return data_dicts, columns
 
 def get_fuel() -> list[dict[str, int|str]]:
+    columns = ['№', 'Топливо']
     with Session(db.engine) as session:
         data = session.query(
-            Fuel_Type.ID_Fuel.label('№'),
-            Fuel_Type.Fuel.label('Топливо')
+            Fuel_Type.ID_Fuel.label(columns[0]),
+            Fuel_Type.Fuel.label(columns[1])
         ).all()
     data_dicts = [row._asdict() for row in data]
-    return data_dicts
+    return data_dicts, columns
 
 def get_transm() -> list[dict[str, int|str]]:
+    columns = ['№', 'Трансмиссия']
     with Session(db.engine) as session:
         data = session.query(
-            Transmission.ID_Transm.label('№'),
-            Transmission.Transm.label('Трансмиссия')
+            Transmission.ID_Transm.label(columns[0]),
+            Transmission.Transm.label(columns[1])
         ).all()
     data_dicts = [row._asdict() for row in data]
-    return data_dicts
+    return data_dicts, columns
 
 def get_rentStat() -> list[dict[str, int|str]]:
+    columns = ['№', 'Статус']
     with Session(db.engine) as session:
         data = session.query(
-            Rent_Status.ID_Status.label('№'),
-            Rent_Status.Status.label('Статус')
+            Rent_Status.ID_Status.label(columns[0]),
+            Rent_Status.Status.label(columns[1])
         ).all()
     data_dicts = [row._asdict() for row in data]
-    return data_dicts
+    return data_dicts, columns
 
 def get_city() -> list[dict[str, int|str]]:
+    columns = ['№', 'Город']
     with Session(db.engine) as session:
         data = session.query(
-            City.ID_City.label('№'),
-            City.City.label('Город')
+            City.ID_City.label(columns[0]),
+            City.City.label(columns[1])
         ).all()
     data_dicts = [row._asdict() for row in data]
-    return data_dicts
+    return data_dicts, columns
 
 def get_parks() -> list[dict[str, int|str]]:
+    columns = ['ID', 'Город', 'Улица', 'Номер дома', 'Время начала работы', 'Время окончания работы']
     with Session(db.engine) as session:
         data = session.query(
-            Park.ID_Park.label('ID'),
-            City.City.label('Город'),
-            Park.Street.label('Улица'),
-            Park.House_Number.label('Номер дома'),
-            Park.Start_Time.label('Время начала работы'),
-            Park.End_Time.label('Время окончания работы')
-        ).join(City, Park.ID_City == City.ID_City)
+            Park.ID_Park.label(columns[0]),
+            City.City.label(columns[1]),
+            Park.Street.label(columns[2]),
+            Park.House_Number.label(columns[3]),
+            Park.Start_Time.label(columns[4]),
+            Park.End_Time.label(columns[5])
+        ).join(
+            City, Park.ID_City == City.ID_City
+        )
     data_dicts = [row._asdict() for row in data]
-    return data_dicts
+    return data_dicts, columns
 
 def get_employee() -> list[dict[str, int|str]]:
+    columns = ['ID', 'Фамилия', 'Имя', 'Отчество', 'Паспорт', 'ИНН',
+               'Город парка', 'Улица парка', 'Номер дома']
     with Session(db.engine) as session:
         data = session.query(
-            Employee.ID_Employee.label('ID'),
-            Employee.Emp_Surname.label('Фамилия'),
-            Employee.Emp_Name.label('Имя'),
-            Employee.Emp_Patr.label('Отчество'),
-            Employee.Passport.label('Паспорт'),
-            Employee.INN.label('ИНН'),
-            City.City.label('Город парка'),
-            Park.Street.label('Улица парка'),
-            Park.House_Number.label('Номер дома')
+            Employee.ID_Employee.label(columns[0]),
+            Employee.Emp_Surname.label(columns[1]),
+            Employee.Emp_Name.label(columns[2]),
+            Employee.Emp_Patr.label(columns[3]),
+            Employee.Passport.label(columns[4]),
+            Employee.INN.label(columns[5]),
+            City.City.label(columns[6]),
+            Park.Street.label(columns[7]),
+            Park.House_Number.label(columns[8])
         ).join(
             Park, Employee.ID_Park == Park.ID_Park
         ).join(
             City, Park.ID_City == City.ID_City
         )
     data_dicts = [row._asdict() for row in data]
-    return data_dicts
+    return data_dicts, columns
 
 def get_auto() -> list[dict[str, int|str]]:
+    columns = ['ID', 'Марка', 'Модель', 'Топливо', 'Трансмиссия',
+               'Цена аренды', 'Год производства', 'Город парка',
+               'Улица', 'Номер дома', 'Расход топлива']
     with Session(db.engine) as session:
         data = session.query(
-        Auto.ID_Auto.label('ID'),
-        Brand.Brand.label('Марка'),
-        Model.Model.label('Модель'),
-        Fuel_Type.Fuel.label('Топливо'),
-        Transmission.Transm.label('Трансмиссия'),
-        Auto.Rent_Price.label('Цена аренды'),
-        Auto.Year.label('Год производства'),
-        City.City.label('Город парка'),
-        Park.Street.label('Улица'),
-        Park.House_Number.label('Номер дома'),
-        Auto.Fuel_Consumption.label('Расход топлива')
-    ).join(
+        Auto.ID_Auto.label(columns[0]),
+        Brand.Brand.label(columns[1]),
+        Model.Model.label(columns[2]),
+        Fuel_Type.Fuel.label(columns[3]),
+        Transmission.Transm.label(columns[4]),
+        Auto.Rent_Price.label(columns[5]),
+        Auto.Year.label(columns[6]),
+        func.coalesce(City.City).label(columns[7]),
+        func.coalesce(Park.Street).label(columns[8]),
+        func.coalesce(Park.House_Number).label(columns[9]),
+        Auto.Fuel_Consumption.label(columns[10])
+    ).outerjoin(
         Park, Auto.ID_Park == Park.ID_Park
-    ).join(
+    ).outerjoin(
         City, City.ID_City == Park.ID_City
     ).join(
         Brand, Auto.ID_Brand == Brand.ID_Brand
@@ -263,39 +276,45 @@ def get_auto() -> list[dict[str, int|str]]:
         Fuel_Type, Auto.ID_Fuel == Fuel_Type.ID_Fuel
     )
     data_dicts = [row._asdict() for row in data]
-    return data_dicts
+    return data_dicts, columns
 
 def get_client() -> list[dict[str, int|str]]:
+    columns = ['ID', 'Фамилия', 'Имя', 'Отчество', 'ВУ',
+               'Стаж', 'Номер телефона', 'Дата рождения']
     with Session(db.engine) as session:
         data = session.query(
-        Client.ID_Client.label('ID'),
-        Client.Cli_Surn.label('Фамилия'),
-        Client.Cli_Name.label('Имя'),
-        Client.Cli_Patr.label('Отчество'),
-        Client.License.label('ВУ'),
-        Client.Expirience.label('Стаж'),
-        Client.Phone_Number.label('Номер телефона'),
-        Client.Date_of_Birth.label('Дата рождения')
+        Client.ID_Client.label(columns[0]),
+        Client.Cli_Surn.label(columns[1]),
+        Client.Cli_Name.label(columns[2]),
+        Client.Cli_Patr.label(columns[3]),
+        Client.License.label(columns[4]),
+        Client.Expirience.label(columns[5]),
+        Client.Phone_Number.label(columns[6]),
+        Client.Date_of_Birth.label(columns[7])
     )
     data_dicts = [row._asdict() for row in data]
-    return data_dicts
+    return data_dicts, columns
 
 def get_rent() -> list[dict[str, int|str]]:
+    columns = ['ID', 'Номер сотрудника', 'Фамилия сотрудника',
+               'Номер клиента', 'Фамилия клиента', 'Номер автомобиля',
+               'Марка', 'Модель', 'Дата начала аренды', 'Дата окончания аренды',
+               'Стоимость аренды', 'Залог', 'Статус аренды']
     with Session(db.engine) as session:
         data = session.query(
-        Rent.ID_Rent.label('ID'),
-        func.coalesce(Rent.ID_Employee).label('Номер сотрудника'),
-        func.coalesce(Employee.Emp_Surname).label('Фамилия сотрудника'),
-        func.coalesce(Rent.ID_Client).label('Номер клиента'),
-        func.coalesce(Client.Cli_Surn).label('Фамилия клиента'),
-        func.coalesce(Auto.ID_Auto).label('Номер автомобиля'),
-        func.coalesce(Brand.Brand).label('Марка'),
-        func.coalesce(Model.Model).label('Модель'),
-        Rent.Start_Date.label('Дата начала аренды'),
-        Rent.End_Date.label('Дата окончания аренды'),
-        Rent.Rent_Price.label('Стоимость аренды'),
-        Rent.Pledge.label('Залог'),
-        Rent_Status.Status.label('Статус аренды')
+        Rent.ID_Rent.label(columns[0]),
+        func.coalesce(Rent.ID_Employee).label(columns[1]),
+        func.coalesce(Employee.Emp_Surname).label(columns[2]),
+        func.coalesce(Rent.ID_Client).label(columns[3]),
+        func.coalesce(Client.Cli_Surn).label(columns[4]),
+        func.coalesce(Auto.ID_Auto).label(columns[5]),
+        func.coalesce(Brand.Brand).label(columns[6]),
+        func.coalesce(Model.Model).label(columns[7]),
+        Rent.Start_Date.label(columns[8]),
+        Rent.End_Date.label(columns[9]),
+        Rent.Rent_Price.label(columns[10]),
+        Rent.Pledge.label(columns[11]),
+        Rent_Status.Status.label(columns[12])
     ).join(
         Rent_Status, Rent.ID_Status == Rent_Status.ID_Status
     ).outerjoin(
@@ -310,4 +329,40 @@ def get_rent() -> list[dict[str, int|str]]:
         Model, Auto.ID_Model == Model.ID_Model
     )
     data_dicts = [row._asdict() for row in data]
-    return data_dicts
+    return data_dicts, columns
+
+
+def delete_data(table_name, id_row) -> str:
+    if table_name == 'аренды':
+        data = Rent.query.get(id_row)
+        if data:
+            db.session.delete(data)
+            db.session.commit()
+            return 'Запись удалена', True
+        else:
+            return 'Ошибка!\nЗапись не обнаружена!', False
+    elif table_name == 'марка автомобиля':
+        data = Brand.query.get(id_row)
+        if data:
+            db.session.delete(data)
+            db.session.commit()
+            return 'Запись удалена', True
+        else:
+            return 'Ошибка!\nЗапись не обнаружена!', False
+    return 'Удаление из данной таблицы не было предусмотрено', False
+
+
+def create_newRow(table_name, data):
+    with Session(db.engine) as session:
+        if table_name == 'марка автомобиля':
+            Id = session.query(func.max(Brand.ID_Brand)).scalar()
+            obj = Brand(ID_Brand=Id+1, Brand=data[1])
+            db.session.add(obj)
+            db.session.commit()
+        if table_name == 'марка автомобиля':
+            print(data)
+            # Id = session.query(func.max(Model.ID_Model)).scalar()
+            # obj = Model(ID_Model=Id+1, Model=data[1])
+        # db.session.add(obj)
+        # db.session.commit()
+        

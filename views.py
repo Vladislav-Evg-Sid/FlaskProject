@@ -21,40 +21,83 @@ def index():
 def table():
     table_type = request.args.get('filter', default='brand', type=str)
     if table_type == 'brand':
-        data = models.get_brands()
+        data, columns = models.get_brands()
         table_name = 'марка автомобиля'
     if table_type == 'model':
-        data = models.get_models()
+        data, columns = models.get_models()
         table_name = 'модель автомобиля'
     if table_type == 'fuel':
-        data = models.get_fuel()
+        data, columns = models.get_fuel()
         table_name = 'тип топлива автомобиля'
     if table_type == 'transm':
-        data = models.get_transm()
+        data, columns = models.get_transm()
         table_name = 'трансмиссия автомобиля'
     if table_type == 'rentStat':
-        data = models.get_rentStat()
+        data, columns = models.get_rentStat()
         table_name = 'статус аренды'
     if table_type == 'city':
-        data = models.get_city()
+        data, columns = models.get_city()
         table_name = 'города'
     if table_type == 'park':
-        data = models.get_parks()
+        data, columns = models.get_parks()
         table_name = 'парки'
     if table_type == 'emp':
-        data = models.get_employee()
+        data, columns = models.get_employee()
         table_name = 'сотрудники'
     if table_type == 'auto':
-        data = models.get_auto()
+        data, columns = models.get_auto()
         table_name = 'автомобили'
     if table_type == 'cli':
-        data = models.get_client()
+        data, columns = models.get_client()
         table_name = 'клиенты'
     if table_type == 'rent':
-        data = models.get_rent()
+        data, columns = models.get_rent()
         table_name = 'аренды'
-    columns = list(data[0].keys())
     return render_template('table.html', columns=columns, data=data, table_name=table_name)
+
+
+@app.route('/comboBox_value_change', methods=['POST'])
+def comboBox_value_change():
+    data = request.json
+    curentID = data.get('curentID')
+    tableName = data.get('TableName')
+    if tableName == 'автомобили':
+        with Session(models.db.engine) as session:
+            Values = session.query(
+                models.Model.ID_Model,
+                models.Model.Model
+                ).where(
+                    models.Model.ID_Brand == curentID
+                ).all()
+            for i in range(len(Values)):
+                Values[i] = list(Values[i])
+    elif tableName == 'аренды':
+        with Session(models.db.engine) as session:
+            curentID = session.query(
+                models.Employee.ID_Park
+            ).where(
+                models.Employee.ID_Employee == curentID
+            ).first()[0]
+            Values = session.query(
+                models.Auto.ID_Auto,
+                func.concat(models.Auto.ID_Auto, '. ', models.Brand.Brand,' ', models.Model.Model)
+            ).join(
+                models.Brand, models.Brand.ID_Brand == models.Auto.ID_Brand
+            ).join(
+                models.Model, models.Model.ID_Model == models.Auto.ID_Model
+            ).where(
+                models.Auto.ID_Park == curentID
+            ).all()
+            for i in range(len(Values)):
+                Values[i] = list(Values[i])
+    
+    # Возвращаем ответ клиенту
+    response = {
+        'curentID': curentID,
+        'Values': Values
+    }
+    return jsonify(response)
+
 
 @app.route('/handle_cell_click', methods=['POST'])
 def handle_cell_click():
@@ -63,11 +106,16 @@ def handle_cell_click():
     column_names = data.get('column_names')
     table_name = data.get('table_name')
     type_col = data.get('type_col')
+    IsModified = data.get('IsModified')
 
     if table_name == 'модель автомобиля':
         type_col = [0, 2, 1]
         with Session(models.db.engine) as session:
-            selected = row_data[1]
+            if IsModified:
+                selected = row_data[1]
+            else:
+                selected = -1
+                row_data = ['']*len(type_col)
             row_data[1] = session.query(
                 models.Brand.ID_Brand,
                 models.Brand.Brand
@@ -78,13 +126,16 @@ def handle_cell_click():
                 if row_data[1][r][1] == selected:
                     s = ' selected'
                 row_data[1][r].append(s)
-    elif table_name in ['марка автомобиля', 'тип топлива автомобиля',
-                        'трансмиссия автомобиля', 'статус аренды', 'города']:
+    elif table_name in ['марка автомобиля', 'тип топлива автомобиля', 'трансмиссия автомобиля', 'статус аренды', 'города']:
         type_col = [0, 1]
     elif table_name == 'парки':
         type_col = [0, 2, 1, 1, 1, 1]
         with Session(models.db.engine) as session:
-            selected = row_data[1]
+            if IsModified:
+                selected = row_data[1]
+            else:
+                selected = -1
+                row_data = ['']*len(type_col)
             row_data[1] = session.query(
                 models.City.ID_City,
                 models.City.City
@@ -98,7 +149,11 @@ def handle_cell_click():
     elif table_name == 'сотрудники':
         type_col = [0, 1, 1, 1, 1, 1, 2]
         with Session(models.db.engine) as session:
-            selected = row_data[6]+', '+row_data[7]+' '+row_data[8]
+            if IsModified:
+                selected = row_data[6]+', '+row_data[7]+' '+row_data[8]
+            else:
+                selected = -1
+                row_data = ['']*len(type_col)
             row_data[6] = session.query(
                 models.Park.ID_Park,
                 func.concat(models.City.City, ', ', models.Park.Street, ' ', models.Park.House_Number)
@@ -112,9 +167,13 @@ def handle_cell_click():
                     s = ' selected'
                 row_data[6][r].append(s)
     elif table_name == 'автомобили':
-        type_col = [0, 2, 2, 2, 2, 1, 1, 2, 0, 0, 1]
+        type_col = [0, 3, 4, 2, 2, 1, 1, 2, 0, 0, 1]
         with Session(models.db.engine) as session:
-            selected = row_data[1]
+            if IsModified:
+                selected = row_data[1]
+            else:
+                selected = -1
+                row_data = ['']*len(type_col)
             row_data[1] = session.query(
                 models.Brand.ID_Brand,
                 models.Brand.Brand
@@ -122,14 +181,22 @@ def handle_cell_click():
             for r in range(len(row_data[1])):
                 row_data[1][r] = list(row_data[1][r])
                 s = ''
-                if row_data[1][r][1] == selected:
-                    s = ' selected'
+                if IsModified:
+                    if row_data[1][r][1] == selected:
+                        s = ' selected'
+                        brandID = row_data[1][r][0]
                 row_data[1][r].append(s)
 
-            selected = row_data[2]
+            if IsModified:
+                selected = row_data[2]
+            else:
+                selected = -1
+                brandID = row_data[1][0][0]
             row_data[2] = session.query(
                 models.Model.ID_Brand,
                 models.Model.Model
+            ).where(
+                models.Model.ID_Brand == brandID
             ).all()
             for r in range(len(row_data[2])):
                 row_data[2][r] = list(row_data[2][r])
@@ -138,7 +205,10 @@ def handle_cell_click():
                     s = ' selected'
                 row_data[2][r].append(s)
 
-            selected = row_data[3]
+            if IsModified:
+                selected = row_data[3]
+            else:
+                selected = -1
             row_data[3] = session.query(
                 models.Fuel_Type.ID_Fuel,
                 models.Fuel_Type.Fuel
@@ -150,7 +220,10 @@ def handle_cell_click():
                     s = ' selected'
                 row_data[3][r].append(s)
 
-            selected = row_data[4]
+            if IsModified:
+                selected = row_data[4]
+            else:
+                selected = -1
             row_data[4] = session.query(
                 models.Transmission.ID_Transm,
                 models.Transmission.Transm
@@ -162,7 +235,10 @@ def handle_cell_click():
                     s = ' selected'
                 row_data[4][r].append(s)
                 
-            selected = row_data[7]+', '+row_data[8]+' '+row_data[9]
+            if IsModified:
+                selected = row_data[7]+', '+row_data[8]+' '+row_data[9]
+            else:
+                selected = -1
             row_data[7] = session.query(
                 models.Park.ID_Park,
                 func.concat(models.City.City, ', ', models.Park.Street, ' ', models.Park.House_Number)
@@ -178,9 +254,13 @@ def handle_cell_click():
     elif table_name == 'клиенты':
         type_col = [0, 1, 1, 1, 1, 1, 1, 1]
     elif table_name == 'аренды':
-        type_col = [0, 2, 0, 2, 0, 2, 0, 0, 1, 1, 1, 1, 2]
+        type_col = [0, 3, 0, 2, 0, 4, 0, 0, 1, 1, 1, 1, 2]
         with Session(models.db.engine) as session:
-            selected = int(row_data[1])
+            if IsModified:
+                selected = int(row_data[1])
+            else:
+                selected = -1
+                row_data = ['']*len(type_col)
             row_data[1] = session.query(
                 models.Employee.ID_Employee,
                 func.concat(models.Employee.ID_Employee, '. ', models.Employee.Emp_Surname,' ', models.Employee.Emp_Name,' ', models.Employee.Emp_Patr)
@@ -190,9 +270,18 @@ def handle_cell_click():
                 s = ''
                 if row_data[1][r][0] == selected:
                     s = ' selected'
+                    if IsModified:
+                        curentID = session.query(
+                            models.Employee.ID_Park
+                        ).where(
+                            models.Employee.ID_Employee == row_data[1][r][0]
+                        ).first()[0]
                 row_data[1][r].append(s)
 
-            selected = int(row_data[3])
+            if IsModified:
+                selected = int(row_data[3])
+            else:
+                selected = -1
             row_data[3] = session.query(
                 models.Client.ID_Client,
                 func.concat(models.Client.ID_Client, '. ', models.Client.Cli_Surn,' ', models.Client.Cli_Name,' ', models.Client.Cli_Patr)
@@ -204,7 +293,15 @@ def handle_cell_click():
                     s = ' selected'
                 row_data[3][r].append(s)
 
-            selected = int(row_data[5])
+            if IsModified:
+                selected = int(row_data[5])
+            else:
+                selected = -1
+                curentID = session.query(
+                    models.Employee.ID_Park
+                ).where(
+                    models.Employee.ID_Employee == row_data[1][0][0]
+                ).first()[0]
             row_data[5] = session.query(
                 models.Auto.ID_Auto,
                 func.concat(models.Auto.ID_Auto, '. ', models.Brand.Brand,' ', models.Model.Model)
@@ -212,6 +309,8 @@ def handle_cell_click():
                 models.Brand, models.Brand.ID_Brand == models.Auto.ID_Brand
             ).join(
                 models.Model, models.Model.ID_Model == models.Auto.ID_Model
+            ).where(
+                models.Auto.ID_Park == curentID
             ).all()
             for r in range(len(row_data[5])):
                 row_data[5][r] = list(row_data[5][r])
@@ -220,7 +319,10 @@ def handle_cell_click():
                     s = ' selected'
                 row_data[5][r].append(s)
 
-            selected = row_data[12]
+            if IsModified:
+                selected = row_data[12]
+            else:
+                selected = -1
             row_data[12] = session.query(
                 models.Rent_Status.ID_Status,
                 models.Rent_Status.Status
@@ -242,19 +344,64 @@ def handle_cell_click():
     }
     return jsonify(response)
 
+def check_data(table_name, data):
+    if table_name in ['марка автомобиля', 'ы']:
+        if data[1] == '': return [True, 'Поле не может быть пустым']
+    elif table_name == 'модель автомобиля':
+        if data[2] == '': return [True, 'Поле не может быть пустым']
+    return [False]
+
 @app.route('/save_changes', methods=['POST'])
 def save_changes():
     data = request.json
     row_data = data.get('row_data')
     column_names = data.get('column_names')
 
-    # Здесь можно выполнить любой Python-код для сохранения изменений
-    # Например, обновление базы данных
-    print(f'Сохранены изменения: {row_data}')
+    for i in range(len(row_data)):
+        print('*'*150)
+        print(f'{column_names[i]}: {row_data[i]}')
 
     # Возвращаем ответ клиенту
     response = {
         'message': 'Изменения сохранены'
+    }
+    return jsonify(response)
+
+@app.route('/delete_row', methods=['POST'])
+def delete_row():
+    data = request.json
+    delID = data.get('del_id')
+    table_name = data.get('table_name')
+    
+    messange, IsCor = models.delete_data(table_name, delID)
+
+    # Возвращаем ответ клиенту
+    response = {
+        'IsCorrect': IsCor,
+        'message': messange
+    }
+    return jsonify(response)
+
+@app.route('/add_new_row', methods=['POST'])
+def add_new_row():
+    data = request.json
+    row_data = data.get('row_data')
+    column_names = data.get('column_names')
+    table_name = data.get('table_name')
+    
+    messange = check_data(table_name, row_data)
+    if messange[0]:
+        response = {
+            'IsCorrect': False,
+            'message': messange[1]
+        }
+        return jsonify(response)
+    models.create_newRow(table_name, row_data)
+
+    # Возвращаем ответ клиенту
+    response = {
+        'IsCorrect': True,
+        'message': 'Запись сохранена'
     }
     return jsonify(response)
 
