@@ -1,15 +1,35 @@
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 from flask import render_template, redirect, url_for, Flask, request, jsonify
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func
 import requests
 import models
+import re
+import os
+import pandas as pd
+import concurrent.futures
 
 
 app = Flask(__name__)
 app.config["SQLALCHEMY_DATABASE_URI"] = (
         "postgresql://postgres:postgres@localhost:5432/TRBD"
     )
+REPORTS_DIR = os.path.join(os.getcwd(), "reports")
+
+def is_valid_time(time_str):
+    try:
+        datetime.strptime(time_str, '%H:%M')
+        return True
+    except ValueError:
+        return False
+
+def is_valid_date(date_str):
+    try:
+        datetime.strptime(date_str, '%Y-%m-%d')
+        return True
+    except ValueError:
+        return False
 
 @app.get("/")
 def index():
@@ -17,42 +37,114 @@ def index():
         "main-page.html"
     )
 
+@app.route('/report')
+def report():
+    table_type = request.args.get('filter', default='auto_list', type=str)
+    calls = {
+        'auto_list':  [models.get_rep_autoList, 'Списки автомобилей в парках'],
+        'rent_by_client':  [models.get_rep_rentByClient, 'Аренда автомобилей по клиентам'],
+        'stat_rent':   [models.get_rep_rentStat, 'Статистика аренды автомобилей']
+    }
+    data, columns = calls[table_type][0]()
+    table_name = calls[table_type][1]
+    return render_template('report.html', columns=columns, data=data, table_name=table_name)
+
+
+def saveRep(table, query):
+    with app.app_context():
+        df = pd.read_sql_query(query, models.db.engine)
+        df.to_excel(table+'.xlsx', index=False)
+
+
+@app.route('/save_report', methods=['POST'])
+def save_report():
+    data = request.json
+    table_name = data.get('table_name')
+    
+    if table_name == 'Списки автомобилей в парках':
+        sql_query = """
+            SELECT 
+                p."ID_Park" AS "Номер парка",
+                c."City" AS "Город",
+                p."Street" AS "Улица",
+                p."House_Number" AS "Номер дома",
+                a."ID_Auto" AS "Номер автомобиля",
+                b."Brand" AS "Марка",
+                m."Model" AS "Модель"
+            FROM 
+                public."Park" as p
+                JOIN public."City" as c ON p."ID_City" = c."ID_City"
+                JOIN public."Auto" as a ON a."ID_Park" = p."ID_Park"
+                JOIN public."Brand" as b ON a."ID_Brand" = b."ID_Brand"
+                JOIN public."Model" as m ON a."ID_Model" = m."ID_Model"
+        """
+    elif table_name == 'Аренда автомобилей по клиентам':
+        sql_query = """
+            SELECT 
+                c."ID_Client" AS "Номер клиента",
+                c."Cli_Surn" AS "Фамилия",
+                c."Cli_Name" AS "Имя",
+                r."Start_Date" AS "Дата начала аренды",
+                r."End_Date" AS "Дата окончания аренды",
+                b."Brand" AS "Марка автомобиля",
+                m."Model" AS "Модель автомобиля"
+            FROM 
+                public."Client" as c
+                JOIN public."Rent" as r ON c."ID_Client" = r."ID_Client"
+                JOIN public."Auto" as a ON a."ID_Auto" = r."ID_Auto"
+                JOIN public."Brand" as b ON a."ID_Brand" = b."ID_Brand"
+                JOIN public."Model" as m ON a."ID_Model" = m."ID_Model"
+        """
+    elif table_name == 'Статистика аренды автомобилей':
+        sql_query = """
+            SELECT 
+                r."ID_Rent" AS "Номер аренды",
+                a."ID_Auto" AS "Номер автомобиля",
+                b."Brand" AS "Марка",
+                m."Model" AS "Модель",
+                e."ID_Employee" AS "Номер сотрудника",
+                e."Emp_Surname" AS "Фамилия сотрудника",
+                c."ID_Client" AS "Номер клиента",
+                c."Cli_Surn" AS "Фамилия клиента"
+            FROM 
+                public."Rent" as r
+                JOIN public."Auto" as a ON r."ID_Auto" = a."ID_Auto"
+                JOIN public."Brand" as b ON a."ID_Brand" = b."ID_Brand"
+                JOIN public."Model" as m ON a."ID_Model" = m."ID_Model"
+                JOIN public."Employee" as e ON r."ID_Employee" = e."ID_Employee"
+                JOIN public."Client" as c ON r."ID_Client" = c."ID_Client"
+        """
+    
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        future = executor.submit(saveRep, table_name, sql_query)
+        future.result()
+        
+    # Возвращаем ответ клиенту
+    response = {
+        'messange': 'Таблица сохранена',
+        'table_name': table_name
+    }
+    return jsonify(response)
+
+
 @app.route('/table')
 def table():
     table_type = request.args.get('filter', default='brand', type=str)
-    if table_type == 'brand':
-        data, columns = models.get_brands()
-        table_name = 'марка автомобиля'
-    if table_type == 'model':
-        data, columns = models.get_models()
-        table_name = 'модель автомобиля'
-    if table_type == 'fuel':
-        data, columns = models.get_fuel()
-        table_name = 'тип топлива автомобиля'
-    if table_type == 'transm':
-        data, columns = models.get_transm()
-        table_name = 'трансмиссия автомобиля'
-    if table_type == 'rentStat':
-        data, columns = models.get_rentStat()
-        table_name = 'статус аренды'
-    if table_type == 'city':
-        data, columns = models.get_city()
-        table_name = 'города'
-    if table_type == 'park':
-        data, columns = models.get_parks()
-        table_name = 'парки'
-    if table_type == 'emp':
-        data, columns = models.get_employee()
-        table_name = 'сотрудники'
-    if table_type == 'auto':
-        data, columns = models.get_auto()
-        table_name = 'автомобили'
-    if table_type == 'cli':
-        data, columns = models.get_client()
-        table_name = 'клиенты'
-    if table_type == 'rent':
-        data, columns = models.get_rent()
-        table_name = 'аренды'
+    calls = {
+        'brand':  [models.get_brands, 'марка автомобиля'],
+        'model':  [models.get_models, 'модель автомобиля'],
+        'fuel':   [models.get_fuel, 'тип топлива автомобиля'],
+        'transm': [models.get_transm, 'трансмиссия автомобиля'],
+        'rentStat': [models.get_rentStat, 'статус аренды'],
+        'city': [models.get_city, 'города'],
+        'park': [models.get_parks, 'парки'],
+        'emp': [models.get_employee, 'сотрудники'],
+        'auto': [models.get_auto, 'автомобили'],
+        'cli': [models.get_client, 'клиенты'],
+        'rent': [models.get_rent, 'аренды']
+    }
+    data, columns = calls[table_type][0]()
+    table_name = calls[table_type][1]
     return render_template('table.html', columns=columns, data=data, table_name=table_name)
 
 
@@ -108,6 +200,7 @@ def handle_cell_click():
     type_col = data.get('type_col')
     IsModified = data.get('IsModified')
 
+    pattern = False
     if table_name == 'модель автомобиля':
         type_col = [0, 2, 1]
         with Session(models.db.engine) as session:
@@ -146,6 +239,7 @@ def handle_cell_click():
                 if row_data[1][r][1] == selected:
                     s = ' selected'
                 row_data[1][r].append(s)
+        pattern = ['', '', '', '', 'чч:мм', 'чч:мм']
     elif table_name == 'сотрудники':
         type_col = [0, 1, 1, 1, 1, 1, 2]
         with Session(models.db.engine) as session:
@@ -166,6 +260,7 @@ def handle_cell_click():
                 if row_data[6][r][1] == selected:
                     s = ' selected'
                 row_data[6][r].append(s)
+        pattern = ['', '', '', '', 'xxxx xxxxxx', 'xxxxxxxxxxx']
     elif table_name == 'автомобили':
         type_col = [0, 3, 4, 2, 2, 1, 1, 2, 0, 0, 1]
         with Session(models.db.engine) as session:
@@ -253,8 +348,9 @@ def handle_cell_click():
                 row_data[7][r].append(s)
     elif table_name == 'клиенты':
         type_col = [0, 1, 1, 1, 1, 1, 1, 1]
+        pattern = ['', '', '', '', 'xxxx xxxxxx', '', '8xxxxxxxxxx', 'гггг-мм-дд']
     elif table_name == 'аренды':
-        type_col = [0, 3, 0, 2, 0, 4, 0, 0, 1, 1, 1, 1, 2]
+        type_col = [0, 3, 0, 2, 0, 4, 0, 0, 1, 1, 0, 1, 2]
         with Session(models.db.engine) as session:
             if IsModified:
                 selected = int(row_data[1])
@@ -333,36 +429,119 @@ def handle_cell_click():
                 if row_data[12][r][1] == selected:
                     s = ' selected'
                 row_data[12][r].append(s)
-        
+        pattern = ['', '', '', '', '', '', '', '', 'гггг-мм-дд', 'гггг-мм-дд', '', '', '']
+    if not pattern:
+        pattern = ['']*len(type_col)
 
     # Возвращаем ответ клиенту
     response = {
         'row_data': row_data,
         'column_names': column_names,
         'table_name': table_name,
-        'type_col': type_col
+        'type_col': type_col,
+        'pattern': pattern
     }
     return jsonify(response)
 
-def check_data(table_name, data):
-    if table_name in ['марка автомобиля', 'ы']:
-        if data[1] == '': return [True, 'Поле не может быть пустым']
+def check_data(table_name, data, columns):
+    if table_name in ['марка автомобиля', 'тип топлива автомобиля', 'трансмиссия автомобиля', 'статус аренды', 'города']:
+        if data[1] == '': return [True, f'Поле "{columns[1]}" не может быть пустым']
     elif table_name == 'модель автомобиля':
-        if data[2] == '': return [True, 'Поле не может быть пустым']
+        if data[2] == '': return [True, f'Поле "{columns[2]}" не может быть пустым']
+    elif table_name == 'парки':
+        for i in range(2, 6):
+            if data[i] == '': return [True, f'Поле "{columns[i]}" не может быть пустым']
+        if not data[3].isnumeric(): return [True, f'{columns[3]} должен быть целым положительным числом']
+        if not is_valid_time(data[4]): return [True, 'Введите время начала работы по шаблону']
+        s = data[4].split(':')
+        if int(s[0]) < 5 or int(s[0]) > 12: return [True, 'Время начала работы может быть с 5:00 до 12:00']
+        if int(s[0]) == 12:
+            if s[1] != '00': return [True, 'Время начала работы может быть с 5:00 до 12:00']
+        if not is_valid_time(data[5]): return [True, 'Введите время окончания работы по шаблону']
+        s = data[5].split(':')
+        if int(s[0]) < 15 and int(s[0]) != 0: return [True, 'Время окончания работы может быть с 15:00 до 00:00']
+        if int(s[0]) == 0:
+            if s[1] != '00': return [True, 'Время окончания работы может быть с 15:00 до 00:00']
+    elif table_name == 'сотрудники':
+        for i in range(1, 6):
+            if i == 3: continue
+            if data[i] == '': return [True, f'Поле "{columns[i]}" не может быть пустым']
+        if not bool(re.match('^[1-9]\d{3} [1-9]\d{5}', data[4])): return [True, 'Введите паспортные данные по шаблону']
+        if not bool(re.match('^[1-9]\d{10}', data[5])): return [True, 'Введите ИНН по шаблону']
+    elif table_name == 'автомобили':
+        for i in [5, 6, 10]:
+            if data[i] == '': return [True, f'Поле "{columns[i]}" не может быть пустым']
+        if not data[5].isnumeric(): return [True, 'Цена аренды должна быть целым положительным числом']
+        if not data[6].isnumeric(): return [True, 'Год производства должен быть числом']
+        s = int(data[6])
+        if s < 1960 or s > datetime.now().year: return [True, f'Год производства автомобиля болжен в период с 1960 по {datetime.now().year} год']
+        if not data[10].isnumeric(): return [True, 'Расход топлива должен быть целым положительным числом']
+    elif table_name == 'клиенты':
+        for i in range(1, 8):
+            if i == 3: continue
+            if data[i] == '': return [True, f'Поле "{columns[i]}" не может быть пустым']
+        if not bool(re.match('^[1-9]\d{3} [1-9]\d{5}', data[4])): return [True, 'Введите данные ВУ по шаблону']
+        if not data[5].isnumeric(): return [True, 'Стаж должен быть целым положительным числом']
+        if len(data[5]) > 2: return [True, 'Стаж не может быть более чем двузначным числом']
+        if not bool(re.match('^8\d{10}', data[6])): return [True, 'Введите номер телефона по шаблону']
+        if not is_valid_date(data[7]): return [True, 'Введите дату рождения по шаблону']
+        if int(data[7].split('-')[0]) >= datetime.now().year-18: return [True, 'Клиенту не может быть меньше 18 лет']
+    elif table_name == 'аренды':
+        for i in [8, 9, 11]:
+            if data[i] == '': return [True, f'Поле "{columns[i]}" не может быть пустым']
+        if not is_valid_date(data[8]): return [True, 'Введите дату начала аренды по шаблону']
+        if not is_valid_date(data[9]): return [True, 'Введите дату окончания аренды по шаблону']
+        if not data[11].isnumeric(): return [True, 'Залог должен быть целым положительным числом']
+        days = (datetime.strptime(data[9], "%Y-%m-%d") - datetime.strptime(data[8], "%Y-%m-%d")).days
+        print(days)
+        if days < 1: return [True, 'Дата окончания аренды должна быть позже даты начала']
+        with Session(models.db.engine) as session:
+            cost = session.query(models.Auto.Rent_Price).filter(models.Auto.ID_Auto == data[5]).scalar()
+        data[10] = cost*(days+1)
     return [False]
+
+@app.route('/add_new_row', methods=['POST'])
+def add_new_row():
+    data = request.json
+    row_data = data.get('row_data')
+    column_names = data.get('column_names')
+    table_name = data.get('table_name')
+    
+    messange = check_data(table_name, row_data, column_names)
+    if messange[0]:
+        response = {
+            'IsCorrect': False,
+            'message': messange[1]
+        }
+        return jsonify(response)
+    models.create_newRow(table_name, row_data)
+
+    # Возвращаем ответ клиенту
+    response = {
+        'IsCorrect': True,
+        'message': 'Запись сохранена'
+    }
+    return jsonify(response)
 
 @app.route('/save_changes', methods=['POST'])
 def save_changes():
     data = request.json
     row_data = data.get('row_data')
     column_names = data.get('column_names')
+    table_name = data.get('table_name')
 
-    for i in range(len(row_data)):
-        print('*'*150)
-        print(f'{column_names[i]}: {row_data[i]}')
+    messange = check_data(table_name, row_data, column_names)
+    if messange[0]:
+        response = {
+            'IsCorrect': False,
+            'message': messange[1]
+        }
+        return jsonify(response)
+    models.edit_data(table_name, row_data)
 
     # Возвращаем ответ клиенту
     response = {
+        'IsCorrect': True,
         'message': 'Изменения сохранены'
     }
     return jsonify(response)
@@ -378,30 +557,8 @@ def delete_row():
     # Возвращаем ответ клиенту
     response = {
         'IsCorrect': IsCor,
-        'message': messange
-    }
-    return jsonify(response)
-
-@app.route('/add_new_row', methods=['POST'])
-def add_new_row():
-    data = request.json
-    row_data = data.get('row_data')
-    column_names = data.get('column_names')
-    table_name = data.get('table_name')
-    
-    messange = check_data(table_name, row_data)
-    if messange[0]:
-        response = {
-            'IsCorrect': False,
-            'message': messange[1]
-        }
-        return jsonify(response)
-    models.create_newRow(table_name, row_data)
-
-    # Возвращаем ответ клиенту
-    response = {
-        'IsCorrect': True,
-        'message': 'Запись сохранена'
+        'message': messange,
+        'title': 'кастомное сообщение'
     }
     return jsonify(response)
 

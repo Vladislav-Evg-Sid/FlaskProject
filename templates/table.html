@@ -93,7 +93,7 @@
                     var rowInfoHtml = '<ul>';
                     response.type_col.forEach(function(item, index) {
                         if (response.type_col[index] == 1) {  // Строка
-                            rowInfoHtml += '<li><label>' + response.column_names[index] + ': </label><input type="text" class="form-control" data-index="' + index + '"></li>';
+                            rowInfoHtml += '<li><label>' + response.column_names[index] + ': </label><input type="text" class="form-control" data-index="' + index + '" placeholder="' + response.pattern[index] + '"></li>';
                         } else if (response.type_col[index] == 2) { // Комбобокс
                             rowInfoHtml += '<li><label>' + response.column_names[index] + ': </label><select class="form-control" data-index="' + index + '">';
                                 response.row_data[index].forEach(function(selItem, selIndex) {
@@ -134,6 +134,7 @@
                     // Удаляем предыдущие обработчики событий
                     $('#saveNewRow').off('click');
 
+                    // Обработчик события сохранения данных
                     $('#saveNewRow').on('click', function() {
                         var tableName = "{{ table_name }}";
                         var RowData = response.row_data.slice(); // Создаем копию оригинальных данных
@@ -141,7 +142,7 @@
                             var index = $(this).data('index');
                             if (response.type_col[index] == 1) {
                                 RowData[index] = $(this).val();
-                            } else if (response.type_col[index] == 2) {
+                            } else if (response.type_col[index] == 2 || response.type_col[index] == 3 || response.type_col[index] == 4) {
                                 RowData[index] = $(this).val();
                             }
                         });
@@ -197,7 +198,7 @@
                 var rowInfoHtml = '<ul>';
                 response.row_data.forEach(function(item, index) {
                     if (response.type_col[index] == 1) {  // Строка
-                        rowInfoHtml += '<li><label>' + response.column_names[index] + ': </label><input type="text" class="form-control" value="' + item + '" data-index="' + index + '"></li>';
+                        rowInfoHtml += '<li><label>' + response.column_names[index] + ': </label><input type="text" class="form-control" value="' + item + '" data-index="' + index + '" placeholder="' + response.pattern[index] + '"></li>';
                     } else if (response.type_col[index] == 2) { // Комбобокс
                         rowInfoHtml += '<li><label>' + response.column_names[index] + ': </label><select class="form-control" data-index="' + index + '">';
                         item.forEach(function(selItem, selIndex) {
@@ -242,6 +243,17 @@
 
                 // Обработчик сохранения изменений
                 $('#saveChanges').on('click', function() {
+                    var tableName = "{{ table_name }}";
+                    var RowData = response.row_data.slice(); // Создаем копию оригинальных данных
+                    $('#rowInfo input, #rowInfo select').each(function() {
+                        var index = $(this).data('index');
+                        if (response.type_col[index] == 1) {
+                            RowData[index] = $(this).val();
+                        } else if (response.type_col[index] == 2 || response.type_col[index] == 3 || response.type_col[index] == 4) {
+                            RowData[index] = $(this).val();
+                        }
+                    });
+                    
                     var updatedRowData = response.row_data.slice(); // Создаем копию оригинальных данных
                     $('#rowInfo input, #rowInfo select').each(function() {
                         var index = $(this).data('index');
@@ -256,11 +268,14 @@
                     $.ajax({
                         url: '/save_changes',
                         type: 'POST',
-                        data: JSON.stringify({ row_data: updatedRowData, column_names: response.column_names }),
+                        data: JSON.stringify({ row_data: RowData, column_names: response.column_names, table_name: tableName }),
                         contentType: 'application/json',
                         success: function(response) {
-                            alert('Изменения сохранены!');
-                            modal.hide();
+                            alert(response.message);
+                            if (response.IsCorrect) {
+                                modal.hide();
+                                location.reload();
+                            }
                         },
                         error: function(error) {
                             alert('Ошибка: ' + error.responseText);

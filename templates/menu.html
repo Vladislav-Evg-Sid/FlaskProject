@@ -50,9 +50,9 @@
                         Отчёты
                     </a>
                     <div class="dropdown-menu" aria-labelledby="navbarDropdown">
-                        <a class="dropdown-item" href="#">Сипски автомобилей в парках</a>
-                        <a class="dropdown-item" href="#">Аренда автомобилей по клиентам</a>
-                        <a class="dropdown-item" href="#">Статистика аренды автомобилей</a>
+                        <a class="dropdown-item" href="{{ url_for('report', filter='auto_list') }}">Списки автомобилей в парках</a>
+                        <a class="dropdown-item" href="{{ url_for('report', filter='rent_by_client') }}">Аренда автомобилей по клиентам</a>
+                        <a class="dropdown-item" href="{{ url_for('report', filter='stat_rent') }}">Статистика аренды автомобилей</a>
                     </div>
                 </li>
             </ul>
